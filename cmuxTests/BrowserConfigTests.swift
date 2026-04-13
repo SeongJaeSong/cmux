@@ -1574,9 +1574,9 @@ final class BrowserNilTargetFallbackDecisionTests: XCTestCase {
 
 
 final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
-    func testKeyboardSameSiteGETWithoutPopupFeaturesPrefersNewTab() {
+    func testKeyboardSameSiteGETWithoutPopupFeaturesPrefersCurrentTabRetarget() {
         XCTAssertTrue(
-            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
                 navigationType: .other,
                 requestMethod: "GET",
                 requestURL: URL(string: "https://search.bilibili.com/all?keyword=test"),
@@ -1587,9 +1587,9 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
         )
     }
 
-    func testLeftClickSameSiteGETWithoutPopupFeaturesPrefersNewTab() {
+    func testLeftClickSameSiteGETWithoutPopupFeaturesPrefersCurrentTabRetarget() {
         XCTAssertTrue(
-            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
                 navigationType: .other,
                 requestMethod: "GET",
                 requestURL: URL(string: "https://search.bilibili.com/all?keyword=test"),
@@ -1602,7 +1602,7 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
 
     func testCrossSiteKeyboardPopupStaysPopup() {
         XCTAssertFalse(
-            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
                 navigationType: .other,
                 requestMethod: "GET",
                 requestURL: URL(string: "https://accounts.google.com/o/oauth2/v2/auth"),
@@ -1615,7 +1615,7 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
 
     func testPopupFeaturesKeepKeyboardRequestOnPopupPath() {
         XCTAssertFalse(
-            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
                 navigationType: .other,
                 requestMethod: "GET",
                 requestURL: URL(string: "https://www.bilibili.com/search"),
@@ -1628,7 +1628,7 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
 
     func testPOSTKeyboardRequestStaysPopup() {
         XCTAssertFalse(
-            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
                 navigationType: .other,
                 requestMethod: "POST",
                 requestURL: URL(string: "https://www.bilibili.com/search"),

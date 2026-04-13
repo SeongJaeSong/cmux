@@ -6046,7 +6046,7 @@ private func browserNavigationSiteKey(_ url: URL?) -> String? {
     return parts.suffix(2).joined(separator: ".")
 }
 
-func browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+func browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
     navigationType: WKNavigationType,
     requestMethod: String?,
     requestURL: URL?,
@@ -6495,7 +6495,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             toolbarsVisibility: windowFeatures.toolbarsVisibility,
             allowsResizing: windowFeatures.allowsResizing
         )
-        let shouldOpenSimpleUserGesturePopupInNewTab = browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+        let shouldOpenSimpleUserGesturePopupInCurrentTab = browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
             navigationType: navigationAction.navigationType,
             requestMethod: navigationAction.request.httpMethod,
             requestURL: navigationAction.request.url,
@@ -6503,18 +6503,18 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             popupFeaturesWereSpecified: popupFeaturesWereSpecified
         )
 
-        if shouldOpenSimpleUserGesturePopupInNewTab {
+        if shouldOpenSimpleUserGesturePopupInCurrentTab {
             if let url = navigationAction.request.url {
 #if DEBUG
                 dlog(
-                    "browser.nav.createWebView.action kind=requestNavigationSimpleUserGesture intent=newTab " +
+                    "browser.nav.createWebView.action kind=requestNavigationSimpleUserGesture intent=currentTab " +
                     "url=\(url.absoluteString)"
                 )
 #endif
                 if let requestNavigation {
-                    requestNavigation(navigationAction.request, .newTab)
+                    requestNavigation(navigationAction.request, .currentTab)
                 } else {
-                    openInNewTab?(url)
+                    browserLoadRequest(navigationAction.request, in: webView)
                 }
             }
             return nil
