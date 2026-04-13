@@ -307,6 +307,11 @@ XCODEBUILD_ARGS=(
   -scheme cmux
   -configuration Debug
   -destination 'platform=macOS'
+  # -quiet avoids a deadlock in Xcode 26's SWBBuildService: the verbose build
+  # description output (target dependency trees) saturates the bidirectional IPC
+  # pipes between xcodebuild and SWBBuildService, causing a circular pipe stall
+  # during CreateBuildDescription.  Warnings and errors still print.
+  -quiet
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
@@ -326,11 +331,31 @@ fi
 XCODEBUILD_ARGS+=(build)
 
 XCODE_LOG="/tmp/cmux-xcodebuild-${TAG_SLUG}.log"
+# xcodebuild stdout/stderr MUST go to a file, not a pipe.  SWBBuildService
+# inherits these file descriptors and writes verbose output to them.  A pipe
+# (even with -quiet) can fill the 16 KB buffer, blocking SWBBuildService and
+# deadlocking the bidirectional IPC with xcodebuild.  A regular file never
+# blocks on write, so the build always makes progress.
 set +e
-xcodebuild "${XCODEBUILD_ARGS[@]}" 2>&1 | tee "$XCODE_LOG" | grep -E '(warning:|error:|fatal:|BUILD FAILED|BUILD SUCCEEDED|\*\* BUILD)'
-XCODE_PIPESTATUS=("${PIPESTATUS[@]}")
+xcodebuild "${XCODEBUILD_ARGS[@]}" > "$XCODE_LOG" 2>&1 &
+XCODE_PID=$!
+# Stream warnings/errors in real-time from the log file without leaving a
+# background tail behind. Use a FIFO so tail and grep are decoupled, then stop
+# tail first so grep can drain EOF and exit normally once xcodebuild exits.
+XCODE_FILTER_DIR="$(mktemp -d /tmp/cmux-xcodebuild-filter.XXXXXX)"
+XCODE_FILTER_FIFO="${XCODE_FILTER_DIR}/log.pipe"
+mkfifo "$XCODE_FILTER_FIFO"
+tail -n +1 -f "$XCODE_LOG" > "$XCODE_FILTER_FIFO" 2>/dev/null &
+TAIL_PID=$!
+grep --line-buffered -E '(warning:|error:|fatal:|BUILD FAILED|BUILD SUCCEEDED|\*\* BUILD)' < "$XCODE_FILTER_FIFO" &
+GREP_PID=$!
+wait "$XCODE_PID"
+XCODE_EXIT=$?
+kill "$TAIL_PID" 2>/dev/null || true
+wait "$TAIL_PID" 2>/dev/null || true
+wait "$GREP_PID" 2>/dev/null || true
+rm -rf "$XCODE_FILTER_DIR"
 set -e
-XCODE_EXIT="${XCODE_PIPESTATUS[0]}"
 echo "Full build log: $XCODE_LOG"
 if [[ "$XCODE_EXIT" -ne 0 ]]; then
   echo "error: xcodebuild failed with exit code $XCODE_EXIT" >&2
