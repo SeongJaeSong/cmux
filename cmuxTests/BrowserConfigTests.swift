@@ -1501,8 +1501,8 @@ final class BrowserPopupDecisionTests: XCTestCase {
         )
     }
 
-    func testOtherNavigationKeyDownGestureDoesNotCreatePopup() {
-        XCTAssertFalse(
+    func testOtherNavigationKeyDownGestureStillCreatesPopup() {
+        XCTAssertTrue(
             browserNavigationShouldCreatePopup(
                 navigationType: .other,
                 modifierFlags: [],
@@ -1554,8 +1554,8 @@ final class BrowserNilTargetFallbackDecisionTests: XCTestCase {
         )
     }
 
-    func testOtherNavigationKeyDownGestureFallsBackToNewTab() {
-        XCTAssertTrue(
+    func testOtherNavigationKeyDownGestureDoesNotFallbackToNewTab() {
+        XCTAssertFalse(
             browserNavigationShouldFallbackNilTargetToNewTab(
                 navigationType: .other,
                 currentEventType: .keyDown
@@ -1567,6 +1567,61 @@ final class BrowserNilTargetFallbackDecisionTests: XCTestCase {
         XCTAssertTrue(
             browserNavigationShouldFallbackNilTargetToNewTab(
                 navigationType: .linkActivated
+            )
+        )
+    }
+}
+
+
+final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
+    func testKeyboardSameSiteGETWithoutPopupFeaturesPrefersNewTab() {
+        XCTAssertTrue(
+            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://search.bilibili.com/all?keyword=test"),
+                openerURL: URL(string: "https://www.bilibili.com/video/BV1"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testCrossSiteKeyboardPopupStaysPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://accounts.google.com/o/oauth2/v2/auth"),
+                openerURL: URL(string: "https://app.example.com/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testPopupFeaturesKeepKeyboardRequestOnPopupPath() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://www.bilibili.com/search"),
+                openerURL: URL(string: "https://www.bilibili.com/video/BV1"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: true
+            )
+        )
+    }
+
+    func testPOSTKeyboardRequestStaysPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+                navigationType: .other,
+                requestMethod: "POST",
+                requestURL: URL(string: "https://www.bilibili.com/search"),
+                openerURL: URL(string: "https://www.bilibili.com/video/BV1"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
             )
         )
     }

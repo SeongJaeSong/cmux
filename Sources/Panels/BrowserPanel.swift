@@ -3895,7 +3895,7 @@ final class BrowserPanel: Panel, ObservableObject {
         case .currentTab:
             navigateWithoutInsecureHTTPPrompt(request: request, recordTypedNavigation: false)
         case .newTab:
-            openLinkInNewTab(url: url)
+            openNavigationRequestInNewTab(request)
         }
     }
 
@@ -3961,7 +3961,10 @@ final class BrowserPanel: Panel, ObservableObject {
                 insecureHTTPBypassHostOnce = host
                 navigateWithoutInsecureHTTPPrompt(request: request, recordTypedNavigation: recordTypedNavigation)
             case .newTab:
-                openLinkInNewTab(url: url, bypassInsecureHTTPHostOnce: host)
+                openNavigationRequestInNewTab(
+                    request,
+                    bypassInsecureHTTPHostOnce: host
+                )
             }
         default:
             return
@@ -4238,6 +4241,59 @@ extension BrowserPanel {
 #if DEBUG
         dlog(
             "browser.newTab.open.done panel=\(id.uuidString.prefix(5)) " +
+            "workspace=\(workspace.id.uuidString.prefix(5)) pane=\(paneId.id.uuidString.prefix(5))"
+        )
+#endif
+    }
+
+    private func openNavigationRequestInNewTab(
+        _ request: URLRequest,
+        bypassInsecureHTTPHostOnce: String? = nil
+    ) {
+        guard let url = request.url else { return }
+#if DEBUG
+        dlog(
+            "browser.newTab.openRequest.begin panel=\(id.uuidString.prefix(5)) " +
+            "workspace=\(workspaceId.uuidString.prefix(5)) method=\(request.httpMethod ?? "GET") " +
+            "url=\(url.absoluteString) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
+        )
+#endif
+        guard let app = AppDelegate.shared else {
+#if DEBUG
+            dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=missingAppDelegate")
+#endif
+            return
+        }
+        guard let workspace = app.workspaceContainingPanel(
+            panelId: id,
+            preferredWorkspaceId: workspaceId
+        )?.workspace else {
+#if DEBUG
+            dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=workspaceMissing")
+#endif
+            return
+        }
+        guard let paneId = workspace.paneId(forPanelId: id) else {
+#if DEBUG
+            dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=paneMissing")
+#endif
+            return
+        }
+        guard let panel = workspace.newBrowserSurface(
+            inPane: paneId,
+            focus: true,
+            preferredProfileID: profileID,
+            bypassInsecureHTTPHostOnce: bypassInsecureHTTPHostOnce
+        ) else {
+#if DEBUG
+            dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=newPanelFailed")
+#endif
+            return
+        }
+        panel.navigateWithoutInsecureHTTPPrompt(request: request, recordTypedNavigation: false)
+#if DEBUG
+        dlog(
+            "browser.newTab.openRequest.done panel=\(id.uuidString.prefix(5)) " +
             "workspace=\(workspace.id.uuidString.prefix(5)) pane=\(paneId.id.uuidString.prefix(5))"
         )
 #endif
@@ -5918,20 +5974,6 @@ func browserNavigationShouldOpenInNewTab(
     return false
 }
 
-func browserNavigationHasExplicitUserGesture(
-    currentEventType: NSEvent.EventType? = NSApp.currentEvent?.type
-) -> Bool {
-    switch currentEventType {
-    case .leftMouseDown, .leftMouseUp,
-         .rightMouseDown, .rightMouseUp,
-         .otherMouseDown, .otherMouseUp,
-         .keyDown:
-        return true
-    default:
-        return false
-    }
-}
-
 func browserNavigationShouldCreatePopup(
     navigationType: WKNavigationType,
     modifierFlags: NSEvent.ModifierFlags,
@@ -5948,16 +5990,7 @@ func browserNavigationShouldCreatePopup(
         currentEventType: currentEventType,
         currentEventButtonNumber: currentEventButtonNumber
     )
-    guard navigationType == .other else {
-        return false
-    }
-
-    // User-triggered new-window requests from form submits / clicks should
-    // reuse tab semantics; leave popup windows for scripted opener flows.
-    if isUserNewTab || browserNavigationHasExplicitUserGesture(currentEventType: currentEventType) {
-        return false
-    }
-    return true
+    return navigationType == .other && !isUserNewTab
 }
 
 func browserNavigationShouldFallbackNilTargetToNewTab(
@@ -5966,11 +5999,81 @@ func browserNavigationShouldFallbackNilTargetToNewTab(
 ) -> Bool {
     // Scripted popups rely on WKUIDelegate.createWebViewWith returning a live
     // web view so window.opener/postMessage remain intact across OAuth flows.
-    if navigationType != .other {
+    navigationType != .other
+}
+
+func browserNavigationHasKeyboardActivation(
+    currentEventType: NSEvent.EventType? = NSApp.currentEvent?.type
+) -> Bool {
+    switch currentEventType {
+    case .keyDown, .keyUp:
         return true
+    default:
+        return false
+    }
+}
+
+func browserNavigationPopupFeaturesWereSpecified(
+    x: NSNumber?,
+    y: NSNumber?,
+    width: NSNumber?,
+    height: NSNumber?,
+    menuBarVisibility: NSNumber?,
+    statusBarVisibility: NSNumber?,
+    toolbarsVisibility: NSNumber?,
+    allowsResizing: NSNumber?
+) -> Bool {
+    x != nil ||
+        y != nil ||
+        width != nil ||
+        height != nil ||
+        menuBarVisibility != nil ||
+        statusBarVisibility != nil ||
+        toolbarsVisibility != nil ||
+        allowsResizing != nil
+}
+
+private func browserNavigationSiteKey(_ url: URL?) -> String? {
+    guard let host = url?.host?.lowercased(), !host.isEmpty else { return nil }
+
+    let isIPv4 = host.allSatisfy { $0.isNumber || $0 == "." }
+    if isIPv4 || host.contains(":") {
+        return host
     }
 
-    return browserNavigationHasExplicitUserGesture(currentEventType: currentEventType)
+    let parts = host.split(separator: ".")
+    guard parts.count >= 2 else { return host }
+    return parts.suffix(2).joined(separator: ".")
+}
+
+func browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+    navigationType: WKNavigationType,
+    requestMethod: String?,
+    requestURL: URL?,
+    openerURL: URL?,
+    currentEventType: NSEvent.EventType? = NSApp.currentEvent?.type,
+    popupFeaturesWereSpecified: Bool
+) -> Bool {
+    guard navigationType == .other else {
+        return false
+    }
+    // Some sites use `window.open()` for plain keyboard-driven same-site searches
+    // without requesting popup chrome or opener-style geometry. Route those to a
+    // normal tab while keeping cross-site/OAuth-style popups on the popup path.
+    guard browserNavigationHasKeyboardActivation(currentEventType: currentEventType) else {
+        return false
+    }
+    guard (requestMethod ?? "GET").uppercased() == "GET" else {
+        return false
+    }
+    guard !popupFeaturesWereSpecified else {
+        return false
+    }
+    guard let requestSite = browserNavigationSiteKey(requestURL),
+          let openerSite = browserNavigationSiteKey(openerURL) else {
+        return false
+    }
+    return requestSite == openerSite
 }
 
 private class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
@@ -6355,7 +6458,8 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             "y=\(windowFeatures.y?.stringValue ?? "nil")",
             "w=\(windowFeatures.width?.stringValue ?? "nil")",
             "h=\(windowFeatures.height?.stringValue ?? "nil")",
-            "toolbar=\(windowFeatures.toolbarVisibility?.stringValue ?? "nil")",
+            "toolbars=\(windowFeatures.toolbarsVisibility?.stringValue ?? "nil")",
+            "resizable=\(windowFeatures.allowsResizing?.stringValue ?? "nil")",
             "status=\(windowFeatures.statusBarVisibility?.stringValue ?? "nil")",
             "menu=\(windowFeatures.menuBarVisibility?.stringValue ?? "nil")"
         ].joined(separator: ",")
@@ -6377,6 +6481,41 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             #if DEBUG
             dlog("browser.navigation.external source=uiDelegate opened=\(opened ? 1 : 0) url=\(url.absoluteString)")
             #endif
+            return nil
+        }
+
+        let popupFeaturesWereSpecified = browserNavigationPopupFeaturesWereSpecified(
+            x: windowFeatures.x,
+            y: windowFeatures.y,
+            width: windowFeatures.width,
+            height: windowFeatures.height,
+            menuBarVisibility: windowFeatures.menuBarVisibility,
+            statusBarVisibility: windowFeatures.statusBarVisibility,
+            toolbarsVisibility: windowFeatures.toolbarsVisibility,
+            allowsResizing: windowFeatures.allowsResizing
+        )
+        let shouldOpenSimpleUserGesturePopupInNewTab = browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+            navigationType: navigationAction.navigationType,
+            requestMethod: navigationAction.request.httpMethod,
+            requestURL: navigationAction.request.url,
+            openerURL: webView.url,
+            popupFeaturesWereSpecified: popupFeaturesWereSpecified
+        )
+
+        if shouldOpenSimpleUserGesturePopupInNewTab {
+            if let url = navigationAction.request.url {
+#if DEBUG
+                dlog(
+                    "browser.nav.createWebView.action kind=requestNavigationSimpleUserGesture intent=newTab " +
+                    "url=\(url.absoluteString)"
+                )
+#endif
+                if let requestNavigation {
+                    requestNavigation(navigationAction.request, .newTab)
+                } else {
+                    openInNewTab?(url)
+                }
+            }
             return nil
         }
 
