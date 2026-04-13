@@ -6002,11 +6002,11 @@ func browserNavigationShouldFallbackNilTargetToNewTab(
     navigationType != .other
 }
 
-func browserNavigationHasKeyboardActivation(
+func browserNavigationHasSimpleUserActivation(
     currentEventType: NSEvent.EventType? = NSApp.currentEvent?.type
 ) -> Bool {
     switch currentEventType {
-    case .keyDown, .keyUp:
+    case .keyDown, .keyUp, .leftMouseDown, .leftMouseUp:
         return true
     default:
         return false
@@ -6057,10 +6057,11 @@ func browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
     guard navigationType == .other else {
         return false
     }
-    // Some sites use `window.open()` for plain keyboard-driven same-site searches
-    // without requesting popup chrome or opener-style geometry. Route those to a
-    // normal tab while keeping cross-site/OAuth-style popups on the popup path.
-    guard browserNavigationHasKeyboardActivation(currentEventType: currentEventType) else {
+    // Some sites use `window.open()` for plain same-site searches triggered by a
+    // direct keyboard submit or left-click, without requesting popup chrome or
+    // opener-style geometry. Route those to a normal tab while keeping
+    // cross-site/OAuth-style popups on the popup path.
+    guard browserNavigationHasSimpleUserActivation(currentEventType: currentEventType) else {
         return false
     }
     guard (requestMethod ?? "GET").uppercased() == "GET" else {
