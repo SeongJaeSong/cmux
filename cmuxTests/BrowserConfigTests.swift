@@ -1587,6 +1587,19 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
         )
     }
 
+    func testLeftClickSameSiteGETWithoutPopupFeaturesPrefersNewTab() {
+        XCTAssertTrue(
+            browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://search.bilibili.com/all?keyword=test"),
+                openerURL: URL(string: "https://www.bilibili.com/video/BV1"),
+                currentEventType: .leftMouseUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
     func testCrossSiteKeyboardPopupStaysPopup() {
         XCTAssertFalse(
             browserNavigationShouldOpenSimpleUserGesturePopupInNewTab(
