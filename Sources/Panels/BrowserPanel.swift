@@ -3879,10 +3879,15 @@ final class BrowserPanel: Panel, ObservableObject {
     }
 
     private func shouldBlockInsecureHTTPNavigation(to url: URL) -> Bool {
-        if browserShouldConsumeOneTimeInsecureHTTPBypass(url, bypassHostOnce: &insecureHTTPBypassHostOnce) {
+        if consumeOneTimeInsecureHTTPBypassIfNeeded(for: url) {
             return false
         }
         return browserShouldBlockInsecureHTTPURL(url)
+    }
+
+    @discardableResult
+    private func consumeOneTimeInsecureHTTPBypassIfNeeded(for url: URL) -> Bool {
+        browserShouldConsumeOneTimeInsecureHTTPBypass(url, bypassHostOnce: &insecureHTTPBypassHostOnce)
     }
 
     private func requestNavigation(_ request: URLRequest, intent: BrowserInsecureHTTPNavigationIntent) {
@@ -4206,7 +4211,7 @@ extension BrowserPanel {
 #if DEBUG
         dlog(
             "browser.newTab.open.begin panel=\(id.uuidString.prefix(5)) " +
-            "workspace=\(workspaceId.uuidString.prefix(5)) url=\(url.absoluteString) " +
+            "workspace=\(workspaceId.uuidString.prefix(5)) url=\(browserNavigationDebugURL(url)) " +
             "bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
         )
 #endif
@@ -4255,7 +4260,7 @@ extension BrowserPanel {
         dlog(
             "browser.newTab.openRequest.begin panel=\(id.uuidString.prefix(5)) " +
             "workspace=\(workspaceId.uuidString.prefix(5)) method=\(request.httpMethod ?? "GET") " +
-            "url=\(url.absoluteString) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
+            "url=\(browserNavigationDebugURL(url)) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
         )
 #endif
         guard let app = AppDelegate.shared else {
@@ -4289,6 +4294,9 @@ extension BrowserPanel {
             dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=newPanelFailed")
 #endif
             return
+        }
+        if bypassInsecureHTTPHostOnce != nil {
+            _ = panel.consumeOneTimeInsecureHTTPBypassIfNeeded(for: url)
         }
         panel.navigateWithoutInsecureHTTPPrompt(request: request, recordTypedNavigation: false)
 #if DEBUG
@@ -5994,8 +6002,7 @@ func browserNavigationShouldCreatePopup(
 }
 
 func browserNavigationShouldFallbackNilTargetToNewTab(
-    navigationType: WKNavigationType,
-    currentEventType: NSEvent.EventType? = NSApp.currentEvent?.type
+    navigationType: WKNavigationType
 ) -> Bool {
     // Scripted popups rely on WKUIDelegate.createWebViewWith returning a live
     // web view so window.opener/postMessage remain intact across OAuth flows.
@@ -6043,7 +6050,27 @@ private func browserNavigationSiteKey(_ url: URL?) -> String? {
 
     let parts = host.split(separator: ".")
     guard parts.count >= 2 else { return host }
+    let commonCountryCodeSecondLevelDomains: Set<Substring> = [
+        "ac", "co", "com", "edu", "gov", "mil", "net", "nom", "org"
+    ]
+    let topLevelDomain = parts[parts.count - 1]
+    let secondLevelDomain = parts[parts.count - 2]
+    if parts.count >= 3,
+       topLevelDomain.count == 2,
+       commonCountryCodeSecondLevelDomains.contains(secondLevelDomain) {
+        return parts.suffix(3).joined(separator: ".")
+    }
     return parts.suffix(2).joined(separator: ".")
+}
+
+private func browserNavigationDebugURL(_ url: URL?) -> String {
+    guard let url,
+          var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+        return "nil"
+    }
+    components.query = nil
+    components.fragment = nil
+    return components.string ?? "\(url.scheme ?? "unknown")://\(url.host ?? "")"
 }
 
 func browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
@@ -6259,7 +6286,7 @@ private class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {
         let currentEventButton = NSApp.currentEvent.map { String($0.buttonNumber) } ?? "nil"
         let navType = String(describing: navigationAction.navigationType)
         let requestMethod = navigationAction.request.httpMethod ?? "nil"
-        let requestURL = navigationAction.request.url?.absoluteString ?? "nil"
+        let requestURL = browserNavigationDebugURL(navigationAction.request.url)
         let targetMainFrame = navigationAction.targetFrame.map { $0.isMainFrame ? "1" : "0" } ?? "nil"
         dlog(
             "browser.nav.decidePolicy navType=\(navType) button=\(navigationAction.buttonNumber) " +
@@ -6480,7 +6507,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
                 NSLog("BrowserPanel external navigation failed to open URL: %@", url.absoluteString)
             }
             #if DEBUG
-            dlog("browser.navigation.external source=uiDelegate opened=\(opened ? 1 : 0) url=\(url.absoluteString)")
+            dlog("browser.navigation.external source=uiDelegate opened=\(opened ? 1 : 0) url=\(browserNavigationDebugURL(url))")
             #endif
             return nil
         }
@@ -6508,7 +6535,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
 #if DEBUG
                 dlog(
                     "browser.nav.createWebView.action kind=requestNavigationSimpleUserGesture intent=currentTab " +
-                    "url=\(url.absoluteString)"
+                    "url=\(browserNavigationDebugURL(url))"
                 )
 #endif
                 if let requestNavigation {
@@ -6548,7 +6575,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
 #if DEBUG
                 dlog(
                     "browser.nav.createWebView.action kind=requestNavigation intent=newTab " +
-                    "url=\(url.absoluteString)"
+                    "url=\(browserNavigationDebugURL(url))"
                 )
 #endif
                 requestNavigation(navigationAction.request, intent)

@@ -1513,7 +1513,7 @@ final class BrowserPopupDecisionTests: XCTestCase {
         )
     }
 
-    func testOtherNavigationPlainLeftClickCreatesPopup() {
+    func testOtherNavigationWithoutExplicitNewTabIntentCreatesPopup() {
         XCTAssertTrue(
             browserNavigationShouldCreatePopup(
                 navigationType: .other,
@@ -1554,15 +1554,6 @@ final class BrowserNilTargetFallbackDecisionTests: XCTestCase {
         )
     }
 
-    func testOtherNavigationKeyDownGestureDoesNotFallbackToNewTab() {
-        XCTAssertFalse(
-            browserNavigationShouldFallbackNilTargetToNewTab(
-                navigationType: .other,
-                currentEventType: .keyDown
-            )
-        )
-    }
-
     func testLinkActivatedNavigationFallsBackToNewTab() {
         XCTAssertTrue(
             browserNavigationShouldFallbackNilTargetToNewTab(
@@ -1574,6 +1565,19 @@ final class BrowserNilTargetFallbackDecisionTests: XCTestCase {
 
 
 final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
+    func testKeyboardKeyDownSameSiteGETWithoutPopupFeaturesPrefersCurrentTabRetarget() {
+        XCTAssertTrue(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://search.bilibili.com/all?keyword=test"),
+                openerURL: URL(string: "https://www.bilibili.com/video/BV1"),
+                currentEventType: .keyDown,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
     func testKeyboardSameSiteGETWithoutPopupFeaturesPrefersCurrentTabRetarget() {
         XCTAssertTrue(
             browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
@@ -1607,6 +1611,19 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
                 requestMethod: "GET",
                 requestURL: URL(string: "https://accounts.google.com/o/oauth2/v2/auth"),
                 openerURL: URL(string: "https://app.example.com/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testCrossRegistrableDomainsUnderCommonMultiPartSuffixStayPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://foo.example.co.uk/search"),
+                openerURL: URL(string: "https://bar.attacker.co.uk/login"),
                 currentEventType: .keyUp,
                 popupFeaturesWereSpecified: false
             )
