@@ -1617,6 +1617,32 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
         )
     }
 
+    func testMixedSchemePopupStaysPopupEvenWhenRegistrableDomainMatches() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://login.example.com/oauth"),
+                openerURL: URL(string: "http://example.com/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testDistinctBareCountryCodeSecondLevelHostsStayPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://foo.co.uk/search"),
+                openerURL: URL(string: "https://bar.co.uk/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
     func testCrossRegistrableDomainsUnderCommonMultiPartSuffixStayPopup() {
         XCTAssertFalse(
             browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(

@@ -1,7 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release -destination 'platform=macOS' build
+source "$PWD/scripts/xcodebuild-guard.sh"
+HOST_ARCH="$(uname -m)"
+
+cleanup_reloadp_xcodebuild_state() {
+  kill_owned_xcodebuild_child
+  release_xcodebuild_lock
+}
+
+trap cleanup_reloadp_xcodebuild_state EXIT INT TERM
+
+acquire_xcodebuild_lock "reloadp.sh cwd=$PWD"
+wait_for_existing_cmux_xcodebuilds
+set +e
+"${XCODEBUILD_ENV_CMD[@]}" xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release -destination "platform=macOS,arch=${HOST_ARCH}" CC="$PWD/scripts/clang-xcodebuild-wrapper.sh" build
+XCODE_EXIT=$?
+release_xcodebuild_lock
+set -e
+if [[ "$XCODE_EXIT" -ne 0 ]]; then
+  exit "$XCODE_EXIT"
+fi
 pkill -x cmux || true
 sleep 0.2
 APP_PATH="$(

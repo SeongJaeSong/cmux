@@ -2515,8 +2515,17 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
         rightPanel.surface.setFocus(true)
         leftPanel.hostedView.suppressReparentFocus()
 
-        XCTAssertTrue(window.makeFirstResponder(leftSurfaceView))
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertTrue(
+            window.makeFirstResponder(leftSurfaceView),
+            "Expected the test harness to install the left surface as first responder before clearing reparent suppression"
+        )
+        let responderRecovered = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                leftPanel.hostedView.isSurfaceViewFirstResponder()
+            },
+            object: NSObject()
+        )
+        wait(for: [responderRecovered], timeout: 1.0)
 
         XCTAssertFalse(
             leftPanel.surface.debugDesiredFocusState(),
@@ -2524,13 +2533,10 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
         )
 
         leftPanel.hostedView.clearSuppressReparentFocus()
-        let focusRecovered = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in
-                leftPanel.surface.debugDesiredFocusState()
-            },
-            object: NSObject()
+        XCTAssertTrue(
+            leftPanel.surface.debugDesiredFocusState(),
+            "Expected clearing reparent focus suppression to immediately restore the Ghostty focus bit once the surface owns first responder"
         )
-        wait(for: [focusRecovered], timeout: 1.0)
 #else
         throw XCTSkip("Debug-only regression test")
 #endif

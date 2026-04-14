@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$PWD/scripts/xcodebuild-guard.sh"
+
 APP_NAME="cmux DEV"
 BUNDLE_ID="com.cmuxterm.app.debug"
 BASE_APP_NAME="cmux DEV"
@@ -15,6 +17,27 @@ CLI_PATH=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/cmux"
 LAST_SOCKET_PATH_FILE="${LAST_SOCKET_PATH_DIR}/last-socket-path"
 AUTO_SKIP_ZIG_BUILD_REASON=""
+XCODE_PID=""
+TAIL_PID=""
+GREP_PID=""
+XCODE_FILTER_DIR=""
+HOST_ARCH="$(uname -m)"
+
+cleanup_reload_xcodebuild_state() {
+  if [[ -n "${TAIL_PID:-}" ]]; then
+    kill "$TAIL_PID" 2>/dev/null || true
+  fi
+  if [[ -n "${GREP_PID:-}" ]]; then
+    kill "$GREP_PID" 2>/dev/null || true
+  fi
+  if [[ -n "${XCODE_FILTER_DIR:-}" && -d "${XCODE_FILTER_DIR:-}" ]]; then
+    rm -rf "$XCODE_FILTER_DIR"
+  fi
+  kill_owned_xcodebuild_child
+  release_xcodebuild_lock
+}
+
+trap cleanup_reload_xcodebuild_state EXIT INT TERM
 
 should_skip_ghostty_cli_helper_zig_build() {
   if [[ "${CMUX_SKIP_ZIG_BUILD:-}" == "1" ]]; then
@@ -306,16 +329,12 @@ XCODEBUILD_ARGS=(
   -project GhosttyTabs.xcodeproj
   -scheme cmux
   -configuration Debug
-  -destination 'platform=macOS'
-  # -quiet avoids a deadlock in Xcode 26's SWBBuildService: the verbose build
-  # description output (target dependency trees) saturates the bidirectional IPC
-  # pipes between xcodebuild and SWBBuildService, causing a circular pipe stall
-  # during CreateBuildDescription.  Warnings and errors still print.
-  -quiet
+  -destination "platform=macOS,arch=${HOST_ARCH}"
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
 fi
+XCODEBUILD_ARGS+=(CC="$PWD/scripts/clang-xcodebuild-wrapper.sh")
 if [[ -z "$TAG" ]]; then
   XCODEBUILD_ARGS+=(
     INFOPLIST_KEY_CFBundleName="$APP_NAME"
@@ -337,8 +356,11 @@ XCODE_LOG="/tmp/cmux-xcodebuild-${TAG_SLUG}.log"
 # deadlocking the bidirectional IPC with xcodebuild.  A regular file never
 # blocks on write, so the build always makes progress.
 set +e
-xcodebuild "${XCODEBUILD_ARGS[@]}" > "$XCODE_LOG" 2>&1 &
+acquire_xcodebuild_lock "reload.sh tag=${TAG_SLUG:-untagged} cwd=$PWD"
+wait_for_existing_cmux_xcodebuilds
+"${XCODEBUILD_ENV_CMD[@]}" xcodebuild "${XCODEBUILD_ARGS[@]}" > "$XCODE_LOG" 2>&1 &
 XCODE_PID=$!
+note_xcodebuild_child_pid "$XCODE_PID"
 # Stream warnings/errors in real-time from the log file without leaving a
 # background tail behind. Use a FIFO so tail and grep are decoupled, then stop
 # tail first so grep can drain EOF and exit normally once xcodebuild exits.
@@ -355,6 +377,11 @@ kill "$TAIL_PID" 2>/dev/null || true
 wait "$TAIL_PID" 2>/dev/null || true
 wait "$GREP_PID" 2>/dev/null || true
 rm -rf "$XCODE_FILTER_DIR"
+XCODE_FILTER_DIR=""
+TAIL_PID=""
+GREP_PID=""
+XCODE_PID=""
+release_xcodebuild_lock
 set -e
 echo "Full build log: $XCODE_LOG"
 if [[ "$XCODE_EXIT" -ne 0 ]]; then

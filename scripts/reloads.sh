@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$PWD/scripts/xcodebuild-guard.sh"
+HOST_ARCH="$(uname -m)"
+
 APP_NAME="cmux STAGING"
 BUNDLE_ID="com.cmuxterm.app.staging"
 BASE_APP_NAME="cmux"
@@ -11,6 +14,13 @@ DERIVED_SET=0
 TAG=""
 LAST_SOCKET_PATH_DIR="$HOME/Library/Application Support/cmux"
 LAST_SOCKET_PATH_FILE="${LAST_SOCKET_PATH_DIR}/last-socket-path"
+
+cleanup_reloads_xcodebuild_state() {
+  kill_owned_xcodebuild_child
+  release_xcodebuild_lock
+}
+
+trap cleanup_reloads_xcodebuild_state EXIT INT TERM
 
 write_last_socket_path() {
   local socket_path="$1"
@@ -123,11 +133,12 @@ XCODEBUILD_ARGS=(
   -project GhosttyTabs.xcodeproj
   -scheme cmux
   -configuration Release
-  -destination 'platform=macOS'
+  -destination "platform=macOS,arch=${HOST_ARCH}"
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
 fi
+XCODEBUILD_ARGS+=(CC="$PWD/scripts/clang-xcodebuild-wrapper.sh")
 if [[ -z "$TAG" ]]; then
   XCODEBUILD_ARGS+=(
     INFOPLIST_KEY_CFBundleName="$APP_NAME"
@@ -137,7 +148,16 @@ if [[ -z "$TAG" ]]; then
 fi
 XCODEBUILD_ARGS+=(build)
 
-xcodebuild "${XCODEBUILD_ARGS[@]}"
+acquire_xcodebuild_lock "reloads.sh tag=${TAG_SLUG:-staging} cwd=$PWD"
+wait_for_existing_cmux_xcodebuilds
+set +e
+"${XCODEBUILD_ENV_CMD[@]}" xcodebuild "${XCODEBUILD_ARGS[@]}"
+XCODE_EXIT=$?
+release_xcodebuild_lock
+set -e
+if [[ "$XCODE_EXIT" -ne 0 ]]; then
+  exit "$XCODE_EXIT"
+fi
 sleep 0.2
 
 FALLBACK_APP_NAME="$BASE_APP_NAME"

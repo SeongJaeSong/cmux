@@ -6040,16 +6040,16 @@ func browserNavigationPopupFeaturesWereSpecified(
         allowsResizing != nil
 }
 
-private func browserNavigationSiteKey(_ url: URL?) -> String? {
-    guard let host = url?.host?.lowercased(), !host.isEmpty else { return nil }
+private func browserNavigationRegistrableDomain(_ host: String) -> String {
+    let normalizedHost = host.lowercased()
 
-    let isIPv4 = host.allSatisfy { $0.isNumber || $0 == "." }
-    if isIPv4 || host.contains(":") {
-        return host
+    let isIPv4 = normalizedHost.allSatisfy { $0.isNumber || $0 == "." }
+    if isIPv4 || normalizedHost.contains(":") {
+        return normalizedHost
     }
 
-    let parts = host.split(separator: ".")
-    guard parts.count >= 2 else { return host }
+    let parts = normalizedHost.split(separator: ".")
+    guard parts.count >= 2 else { return normalizedHost }
     let commonCountryCodeSecondLevelDomains: Set<Substring> = [
         "ac", "co", "com", "edu", "gov", "mil", "net", "nom", "org"
     ]
@@ -6061,6 +6061,15 @@ private func browserNavigationSiteKey(_ url: URL?) -> String? {
         return parts.suffix(3).joined(separator: ".")
     }
     return parts.suffix(2).joined(separator: ".")
+}
+
+private func browserNavigationSiteKey(_ url: URL?) -> String? {
+    guard let url,
+          let scheme = url.scheme?.lowercased(), !scheme.isEmpty,
+          let host = url.host?.lowercased(), !host.isEmpty else {
+        return nil
+    }
+    return "\(scheme)://\(browserNavigationRegistrableDomain(host))"
 }
 
 private func browserNavigationDebugURL(_ url: URL?) -> String {
