@@ -1670,6 +1670,32 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
         )
     }
 
+    func testCloudFrontTenantsStayPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://foo.cloudfront.net/search"),
+                openerURL: URL(string: "https://bar.cloudfront.net/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testS3TenantsStayPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://a.s3.amazonaws.com/search"),
+                openerURL: URL(string: "https://b.s3.amazonaws.com/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
     func testDistinctBareCountryCodeSecondLevelHostsStayPopup() {
         XCTAssertFalse(
             browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(

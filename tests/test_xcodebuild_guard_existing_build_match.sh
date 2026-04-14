@@ -9,8 +9,9 @@ ps() {
   cat <<'EOF'
 123 00:10 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
 124 00:05 /usr/bin/xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release build
-125 00:04 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug test
-126 00:02 /usr/bin/xcodebuild -project Other.xcodeproj -scheme cmux -configuration Debug build
+125 00:04 xcodebuild -project /Users/austinwang/manaflow/term/cmux1/GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
+126 00:03 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug test
+127 00:02 /usr/bin/xcodebuild -project Other.xcodeproj -scheme cmux -configuration Debug build
 EOF
 }
 
@@ -22,7 +23,12 @@ if ! grep -Fq "123 00:10 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux 
 fi
 
 if ! grep -Fq "124 00:05 /usr/bin/xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release build" <<<"$output"; then
-  echo "FAIL: expected absolute-path xcodebuild cmux build to be detected"
+  echo "FAIL: expected /usr/bin/xcodebuild cmux build to be detected"
+  exit 1
+fi
+
+if ! grep -Fq "125 00:04 xcodebuild -project /Users/austinwang/manaflow/term/cmux1/GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build" <<<"$output"; then
+  echo "FAIL: expected absolute project path cmux build to be detected"
   exit 1
 fi
 
@@ -49,4 +55,9 @@ if ! grep -Fq "124 00:05" <<<"$output"; then
   exit 1
 fi
 
-echo "PASS: xcodebuild guard matches both plain and absolute-path cmux builds"
+if ! grep -Fq "125 00:04" <<<"$output"; then
+  echo "FAIL: guard should continue reporting absolute project path builds"
+  exit 1
+fi
+
+echo "PASS: xcodebuild guard matches plain, /usr/bin, and absolute-project-path cmux builds"
