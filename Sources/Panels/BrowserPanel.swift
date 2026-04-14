@@ -4255,12 +4255,12 @@ extension BrowserPanel {
         _ request: URLRequest,
         bypassInsecureHTTPHostOnce: String? = nil
     ) {
-        guard let url = request.url else { return }
+        guard request.url != nil else { return }
 #if DEBUG
         dlog(
             "browser.newTab.openRequest.begin panel=\(id.uuidString.prefix(5)) " +
             "workspace=\(workspaceId.uuidString.prefix(5)) method=\(request.httpMethod ?? "GET") " +
-            "url=\(browserNavigationDebugURL(url)) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
+            "url=\(browserNavigationDebugURL(request.url)) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
         )
 #endif
         guard let app = AppDelegate.shared else {
@@ -4294,9 +4294,6 @@ extension BrowserPanel {
             dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=newPanelFailed")
 #endif
             return
-        }
-        if bypassInsecureHTTPHostOnce != nil {
-            _ = panel.consumeOneTimeInsecureHTTPBypassIfNeeded(for: url)
         }
         panel.navigateWithoutInsecureHTTPPrompt(request: request, recordTypedNavigation: false)
 #if DEBUG
@@ -6040,62 +6037,40 @@ func browserNavigationPopupFeaturesWereSpecified(
         allowsResizing != nil
 }
 
-private func browserNavigationRegistrableDomain(_ host: String) -> String {
-    let normalizedHost = host.lowercased()
-
-    let isIPv4 = normalizedHost.allSatisfy { $0.isNumber || $0 == "." }
-    if isIPv4 || normalizedHost.contains(":") {
-        return normalizedHost
-    }
-
-    let parts = normalizedHost.split(separator: ".")
-    guard parts.count >= 2 else { return normalizedHost }
-    let commonCountryCodeSecondLevelDomains: Set<Substring> = [
-        "ac", "co", "com", "edu", "gov", "mil", "net", "nom", "org"
-    ]
-    let topLevelDomain = parts[parts.count - 1]
-    let secondLevelDomain = parts[parts.count - 2]
-    if parts.count >= 3,
-       topLevelDomain.count == 2,
-       commonCountryCodeSecondLevelDomains.contains(secondLevelDomain) {
-        return parts.suffix(3).joined(separator: ".")
-    }
-    return parts.suffix(2).joined(separator: ".")
-}
-
-private let browserNavigationMultiTenantSuffixes: [String] = [
-    "appspot.com",
-    "blogspot.com",
-    "firebaseapp.com",
-    "github.io",
-    "herokuapp.com",
-    "netlify.app",
-    "pages.dev",
-    "vercel.app",
-    "web.app",
-    "workers.dev"
+// Keep cross-host popup retargeting intentionally narrow. Same-host GET popups
+// are safe to collapse into the current tab, and explicit host alias groups let
+// us preserve known first-party search flows without guessing at the public
+// suffix list for arbitrary hosted tenants.
+private let browserNavigationSimpleUserGesturePopupRetargetHostAliases: [Set<String>] = [
+    [
+        "bilibili.com",
+        "search.bilibili.com",
+        "www.bilibili.com",
+    ],
 ]
 
-private func browserNavigationUsesFullHostSiteKey(_ host: String) -> Bool {
-    let normalizedHost = host.lowercased()
-    for suffix in browserNavigationMultiTenantSuffixes {
-        if normalizedHost == suffix || normalizedHost.hasSuffix(".\(suffix)") {
+private func browserNavigationShouldRetargetSimpleUserGesturePopup(
+    requestURL: URL?,
+    openerURL: URL?
+) -> Bool {
+    guard let requestURL,
+          let openerURL,
+          let requestScheme = requestURL.scheme?.lowercased(), !requestScheme.isEmpty,
+          let openerScheme = openerURL.scheme?.lowercased(), !openerScheme.isEmpty,
+          requestScheme == openerScheme,
+          let requestHost = BrowserInsecureHTTPSettings.normalizeHost(requestURL.host ?? ""),
+          let openerHost = BrowserInsecureHTTPSettings.normalizeHost(openerURL.host ?? "") else {
+        return false
+    }
+    if requestHost == openerHost {
+        return true
+    }
+    for aliases in browserNavigationSimpleUserGesturePopupRetargetHostAliases {
+        if aliases.contains(requestHost), aliases.contains(openerHost) {
             return true
         }
     }
     return false
-}
-
-private func browserNavigationSiteKey(_ url: URL?) -> String? {
-    guard let url,
-          let scheme = url.scheme?.lowercased(), !scheme.isEmpty,
-          let host = url.host?.lowercased(), !host.isEmpty else {
-        return nil
-    }
-    let hostKey = browserNavigationUsesFullHostSiteKey(host)
-        ? host
-        : browserNavigationRegistrableDomain(host)
-    return "\(scheme)://\(hostKey)"
 }
 
 private func browserNavigationDebugURL(_ url: URL?) -> String {
@@ -6146,11 +6121,10 @@ func browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
     guard !popupFeaturesWereSpecified else {
         return false
     }
-    guard let requestSite = browserNavigationSiteKey(requestURL),
-          let openerSite = browserNavigationSiteKey(openerURL) else {
-        return false
-    }
-    return requestSite == openerSite
+    return browserNavigationShouldRetargetSimpleUserGesturePopup(
+        requestURL: requestURL,
+        openerURL: openerURL
+    )
 }
 
 private class BrowserNavigationDelegate: NSObject, WKNavigationDelegate {

@@ -180,15 +180,12 @@ list_running_cmux_xcodebuilds() {
     line="${line#* }"
     etime="${line%% *}"
     command="${line#* }"
-    case "$command" in
-      xcodebuild\ -project\ GhosttyTabs.xcodeproj\ -scheme\ cmux\ *|\
-      */xcodebuild\ -project\ GhosttyTabs.xcodeproj\ -scheme\ cmux\ *)
-        if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" && "$pid" == "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
-          continue
-        fi
-        printf '%s %s %s\n' "$pid" "$etime" "$command"
-        ;;
-    esac
+    if [[ "$command" =~ (^|/)xcodebuild[[:space:]]+-project[[:space:]]+([^[:space:]]*/)?GhosttyTabs\.xcodeproj[[:space:]]+-scheme[[:space:]]+cmux([[:space:]]|$) ]]; then
+      if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" && "$pid" == "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
+        continue
+      fi
+      printf '%s %s %s\n' "$pid" "$etime" "$command"
+    fi
   done < <(ps -axo pid=,etime=,command=)
 }
 
