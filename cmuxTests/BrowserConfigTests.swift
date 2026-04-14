@@ -1617,6 +1617,20 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
         )
     }
 
+    func testExplicitCommandNewTabGestureDoesNotRetargetIntoCurrentTab() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://search.bilibili.com/all?keyword=test"),
+                openerURL: URL(string: "https://www.bilibili.com/video/BV1"),
+                modifierFlags: [.command],
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
     func testMixedSchemePopupStaysPopupEvenWhenRegistrableDomainMatches() {
         XCTAssertFalse(
             browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
@@ -1624,6 +1638,32 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
                 requestMethod: "GET",
                 requestURL: URL(string: "https://login.example.com/oauth"),
                 openerURL: URL(string: "http://example.com/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testGitHubPagesTenantsStayPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://foo.github.io/search"),
+                openerURL: URL(string: "https://bar.github.io/login"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
+    func testAppspotTenantsStayPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://a.appspot.com/search"),
+                openerURL: URL(string: "https://b.appspot.com/login"),
                 currentEventType: .keyUp,
                 popupFeaturesWereSpecified: false
             )

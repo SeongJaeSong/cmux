@@ -3,6 +3,7 @@ set -euo pipefail
 
 source "$PWD/scripts/xcodebuild-guard.sh"
 HOST_ARCH="$(uname -m)"
+XCODE_PID=""
 
 APP_NAME="cmux STAGING"
 BUNDLE_ID="com.cmuxterm.app.staging"
@@ -151,8 +152,12 @@ XCODEBUILD_ARGS+=(build)
 acquire_xcodebuild_lock "reloads.sh tag=${TAG_SLUG:-staging} cwd=$PWD"
 wait_for_existing_cmux_xcodebuilds
 set +e
-"${XCODEBUILD_ENV_CMD[@]}" xcodebuild "${XCODEBUILD_ARGS[@]}"
+"${XCODEBUILD_ENV_CMD[@]}" xcodebuild "${XCODEBUILD_ARGS[@]}" &
+XCODE_PID=$!
+note_xcodebuild_child_pid "$XCODE_PID"
+wait "$XCODE_PID"
 XCODE_EXIT=$?
+XCODE_PID=""
 release_xcodebuild_lock
 set -e
 if [[ "$XCODE_EXIT" -ne 0 ]]; then

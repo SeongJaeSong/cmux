@@ -6063,13 +6063,39 @@ private func browserNavigationRegistrableDomain(_ host: String) -> String {
     return parts.suffix(2).joined(separator: ".")
 }
 
+private let browserNavigationMultiTenantSuffixes: [String] = [
+    "appspot.com",
+    "blogspot.com",
+    "firebaseapp.com",
+    "github.io",
+    "herokuapp.com",
+    "netlify.app",
+    "pages.dev",
+    "vercel.app",
+    "web.app",
+    "workers.dev"
+]
+
+private func browserNavigationUsesFullHostSiteKey(_ host: String) -> Bool {
+    let normalizedHost = host.lowercased()
+    for suffix in browserNavigationMultiTenantSuffixes {
+        if normalizedHost == suffix || normalizedHost.hasSuffix(".\(suffix)") {
+            return true
+        }
+    }
+    return false
+}
+
 private func browserNavigationSiteKey(_ url: URL?) -> String? {
     guard let url,
           let scheme = url.scheme?.lowercased(), !scheme.isEmpty,
           let host = url.host?.lowercased(), !host.isEmpty else {
         return nil
     }
-    return "\(scheme)://\(browserNavigationRegistrableDomain(host))"
+    let hostKey = browserNavigationUsesFullHostSiteKey(host)
+        ? host
+        : browserNavigationRegistrableDomain(host)
+    return "\(scheme)://\(hostKey)"
 }
 
 private func browserNavigationDebugURL(_ url: URL?) -> String {
@@ -6087,7 +6113,11 @@ func browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
     requestMethod: String?,
     requestURL: URL?,
     openerURL: URL?,
+    modifierFlags: NSEvent.ModifierFlags = [],
+    buttonNumber: Int = 0,
+    hasRecentMiddleClickIntent: Bool = false,
     currentEventType: NSEvent.EventType? = NSApp.currentEvent?.type,
+    currentEventButtonNumber: Int? = NSApp.currentEvent?.buttonNumber,
     popupFeaturesWereSpecified: Bool
 ) -> Bool {
     guard navigationType == .other else {
@@ -6098,6 +6128,16 @@ func browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
     // opener-style geometry. Route those to a normal tab while keeping
     // cross-site/OAuth-style popups on the popup path.
     guard browserNavigationHasSimpleUserActivation(currentEventType: currentEventType) else {
+        return false
+    }
+    guard !browserNavigationShouldOpenInNewTab(
+        navigationType: navigationType,
+        modifierFlags: modifierFlags,
+        buttonNumber: buttonNumber,
+        hasRecentMiddleClickIntent: hasRecentMiddleClickIntent,
+        currentEventType: currentEventType,
+        currentEventButtonNumber: currentEventButtonNumber
+    ) else {
         return false
     }
     guard (requestMethod ?? "GET").uppercased() == "GET" else {
@@ -6521,6 +6561,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             return nil
         }
 
+        let hasRecentMiddleClickIntent = CmuxWebView.hasRecentMiddleClickIntent(for: webView)
         let popupFeaturesWereSpecified = browserNavigationPopupFeaturesWereSpecified(
             x: windowFeatures.x,
             y: windowFeatures.y,
@@ -6536,6 +6577,9 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             requestMethod: navigationAction.request.httpMethod,
             requestURL: navigationAction.request.url,
             openerURL: webView.url,
+            modifierFlags: navigationAction.modifierFlags,
+            buttonNumber: navigationAction.buttonNumber,
+            hasRecentMiddleClickIntent: hasRecentMiddleClickIntent,
             popupFeaturesWereSpecified: popupFeaturesWereSpecified
         )
 
@@ -6567,7 +6611,7 @@ private class BrowserUIDelegate: NSObject, WKUIDelegate {
             navigationType: navigationAction.navigationType,
             modifierFlags: navigationAction.modifierFlags,
             buttonNumber: navigationAction.buttonNumber,
-            hasRecentMiddleClickIntent: CmuxWebView.hasRecentMiddleClickIntent(for: webView)
+            hasRecentMiddleClickIntent: hasRecentMiddleClickIntent
         )
 
         if isScriptedPopup, let popupWebView = openPopup?(configuration, windowFeatures) {

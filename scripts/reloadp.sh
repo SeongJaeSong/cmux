@@ -3,6 +3,7 @@ set -euo pipefail
 
 source "$PWD/scripts/xcodebuild-guard.sh"
 HOST_ARCH="$(uname -m)"
+XCODE_PID=""
 
 cleanup_reloadp_xcodebuild_state() {
   kill_owned_xcodebuild_child
@@ -14,8 +15,12 @@ trap cleanup_reloadp_xcodebuild_state EXIT INT TERM
 acquire_xcodebuild_lock "reloadp.sh cwd=$PWD"
 wait_for_existing_cmux_xcodebuilds
 set +e
-"${XCODEBUILD_ENV_CMD[@]}" xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release -destination "platform=macOS,arch=${HOST_ARCH}" CC="$PWD/scripts/clang-xcodebuild-wrapper.sh" build
+"${XCODEBUILD_ENV_CMD[@]}" xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release -destination "platform=macOS,arch=${HOST_ARCH}" CC="$PWD/scripts/clang-xcodebuild-wrapper.sh" build &
+XCODE_PID=$!
+note_xcodebuild_child_pid "$XCODE_PID"
+wait "$XCODE_PID"
 XCODE_EXIT=$?
+XCODE_PID=""
 release_xcodebuild_lock
 set -e
 if [[ "$XCODE_EXIT" -ne 0 ]]; then
