@@ -4255,12 +4255,12 @@ extension BrowserPanel {
         _ request: URLRequest,
         bypassInsecureHTTPHostOnce: String? = nil
     ) {
-        guard request.url != nil else { return }
+        guard let url = request.url else { return }
 #if DEBUG
         dlog(
             "browser.newTab.openRequest.begin panel=\(id.uuidString.prefix(5)) " +
             "workspace=\(workspaceId.uuidString.prefix(5)) method=\(request.httpMethod ?? "GET") " +
-            "url=\(browserNavigationDebugURL(request.url)) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
+            "url=\(browserNavigationDebugURL(url)) bypass=\(bypassInsecureHTTPHostOnce ?? "nil")"
         )
 #endif
         guard let app = AppDelegate.shared else {
@@ -4294,6 +4294,11 @@ extension BrowserPanel {
             dlog("browser.newTab.openRequest.abort panel=\(id.uuidString.prefix(5)) reason=newPanelFailed")
 #endif
             return
+        }
+        if bypassInsecureHTTPHostOnce != nil {
+            // Request-based new-tab navigations bypass shouldBlockInsecureHTTPNavigation,
+            // so consume the one-shot allowance here after the destination panel exists.
+            _ = panel.consumeOneTimeInsecureHTTPBypassIfNeeded(for: url)
         }
         panel.navigateWithoutInsecureHTTPPrompt(request: request, recordTypedNavigation: false)
 #if DEBUG
@@ -6049,6 +6054,17 @@ private let browserNavigationSimpleUserGesturePopupRetargetHostAliases: [Set<Str
     ],
 ]
 
+private func browserNavigationDefaultPort(for scheme: String) -> Int? {
+    switch scheme {
+    case "http":
+        return 80
+    case "https":
+        return 443
+    default:
+        return nil
+    }
+}
+
 private func browserNavigationShouldRetargetSimpleUserGesturePopup(
     requestURL: URL?,
     openerURL: URL?
@@ -6058,6 +6074,8 @@ private func browserNavigationShouldRetargetSimpleUserGesturePopup(
           let requestScheme = requestURL.scheme?.lowercased(), !requestScheme.isEmpty,
           let openerScheme = openerURL.scheme?.lowercased(), !openerScheme.isEmpty,
           requestScheme == openerScheme,
+          (requestURL.port ?? browserNavigationDefaultPort(for: requestScheme))
+            == (openerURL.port ?? browserNavigationDefaultPort(for: openerScheme)),
           let requestHost = BrowserInsecureHTTPSettings.normalizeHost(requestURL.host ?? ""),
           let openerHost = BrowserInsecureHTTPSettings.normalizeHost(openerURL.host ?? "") else {
         return false

@@ -174,12 +174,8 @@ acquire_xcodebuild_lock() {
 
 list_running_cmux_xcodebuilds() {
   local pid etime command
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    pid="${line%% *}"
-    line="${line#* }"
-    etime="${line%% *}"
-    command="${line#* }"
+  while read -r pid etime command; do
+    [[ -n "$pid" && -n "$etime" && -n "$command" ]] || continue
     if [[ "$command" =~ (^|/)xcodebuild[[:space:]]+-project[[:space:]]+([^[:space:]]*/)?GhosttyTabs\.xcodeproj[[:space:]]+-scheme[[:space:]]+cmux([[:space:]]|$) ]]; then
       if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" && "$pid" == "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
         continue
