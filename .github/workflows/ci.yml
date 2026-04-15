@@ -41,6 +41,9 @@ jobs:
       - name: Validate xcodebuild existing-build matcher
         run: ./tests/test_xcodebuild_guard_existing_build_match.sh
 
+      - name: Validate xcodebuild lock safety
+        run: ./tests/test_xcodebuild_guard_lock_safety.sh
+
       - name: Validate clang wrapper DEVELOPER_DIR normalization
         run: ./tests/test_clang_xcodebuild_wrapper_developer_dir.sh
 
