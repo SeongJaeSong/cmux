@@ -9,7 +9,7 @@ ps() {
   cat <<'EOF'
     123       00:10 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
     124       00:05 /usr/bin/xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release build
-    125       00:04 xcodebuild -project /Users/austinwang/manaflow/term/cmux1/GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
+    125       00:04 xcodebuild -scheme cmux -project /Users/austinwang/My Checkout/cmux1/GhosttyTabs.xcodeproj -configuration Debug build
     126       00:03 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug test
     127       00:02 /usr/bin/xcodebuild -project Other.xcodeproj -scheme cmux -configuration Debug build
 EOF
@@ -27,8 +27,8 @@ if ! grep -Fq "124 00:05 /usr/bin/xcodebuild -project GhosttyTabs.xcodeproj -sch
   exit 1
 fi
 
-if ! grep -Fq "125 00:04 xcodebuild -project /Users/austinwang/manaflow/term/cmux1/GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build" <<<"$output"; then
-  echo "FAIL: expected absolute project path cmux build to be detected"
+if ! grep -Fq "125 00:04 xcodebuild -scheme cmux -project /Users/austinwang/My Checkout/cmux1/GhosttyTabs.xcodeproj -configuration Debug build" <<<"$output"; then
+  echo "FAIL: expected reordered cmux build with spaces in project path to be detected"
   exit 1
 fi
 
@@ -56,8 +56,8 @@ if ! grep -Fq "124 00:05" <<<"$output"; then
 fi
 
 if ! grep -Fq "125 00:04" <<<"$output"; then
-  echo "FAIL: guard should continue reporting absolute project path builds"
+  echo "FAIL: guard should continue reporting reordered project-path builds"
   exit 1
 fi
 
-echo "PASS: xcodebuild guard matches plain, /usr/bin, and absolute-project-path cmux builds"
+echo "PASS: xcodebuild guard matches plain, /usr/bin, and reordered project-path cmux builds"

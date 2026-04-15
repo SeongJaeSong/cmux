@@ -1696,6 +1696,19 @@ final class BrowserSimpleUserGesturePopupRetargetingTests: XCTestCase {
         )
     }
 
+    func testSameHostKeyboardPopupStaysPopup() {
+        XCTAssertFalse(
+            browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
+                navigationType: .other,
+                requestMethod: "GET",
+                requestURL: URL(string: "https://www.example.com/chooser"),
+                openerURL: URL(string: "https://www.example.com/settings"),
+                currentEventType: .keyUp,
+                popupFeaturesWereSpecified: false
+            )
+        )
+    }
+
     func testCrossPortSameHostPopupStaysPopup() {
         XCTAssertFalse(
             browserNavigationShouldOpenSimpleUserGesturePopupInCurrentTab(
