@@ -7,11 +7,11 @@ source "$ROOT_DIR/scripts/xcodebuild-guard.sh"
 
 ps() {
   cat <<'EOF'
-123 00:10 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
-124 00:05 /usr/bin/xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release build
-125 00:04 xcodebuild -project /Users/austinwang/manaflow/term/cmux1/GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
-126 00:03 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug test
-127 00:02 /usr/bin/xcodebuild -project Other.xcodeproj -scheme cmux -configuration Debug build
+    123       00:10 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
+    124       00:05 /usr/bin/xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux -configuration Release build
+    125       00:04 xcodebuild -project /Users/austinwang/manaflow/term/cmux1/GhosttyTabs.xcodeproj -scheme cmux -configuration Debug build
+    126       00:03 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug test
+    127       00:02 /usr/bin/xcodebuild -project Other.xcodeproj -scheme cmux -configuration Debug build
 EOF
 }
 
