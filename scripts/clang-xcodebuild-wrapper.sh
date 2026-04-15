@@ -8,6 +8,10 @@ set -euo pipefail
 # while the probe output stays below the deadlock threshold.
 
 DEVELOPER_DIR_PATH="${DEVELOPER_DIR:-$(xcode-select -p)}"
+DEVELOPER_DIR_PATH="${DEVELOPER_DIR_PATH%/}"
+if [[ "$DEVELOPER_DIR_PATH" == *.app ]]; then
+  DEVELOPER_DIR_PATH="${DEVELOPER_DIR_PATH}/Contents/Developer"
+fi
 REAL_CLANG="${DEVELOPER_DIR_PATH}/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
 
 if [[ ! -x "$REAL_CLANG" ]]; then

@@ -6042,10 +6042,10 @@ func browserNavigationPopupFeaturesWereSpecified(
         allowsResizing != nil
 }
 
-// Keep cross-host popup retargeting intentionally narrow. Same-host GET popups
-// are safe to collapse into the current tab, and explicit host alias groups let
-// us preserve known first-party search flows without guessing at the public
-// suffix list for arbitrary hosted tenants.
+// Keep popup retargeting intentionally narrow. Explicit cross-host alias groups
+// preserve known first-party search flows without guessing at the public suffix
+// list for arbitrary hosted tenants, while same-host scripted popups stay on
+// the popup path so opener-dependent browser flows keep working.
 private let browserNavigationSimpleUserGesturePopupRetargetHostAliases: [Set<String>] = [
     [
         "bilibili.com",
@@ -6080,11 +6080,10 @@ private func browserNavigationShouldRetargetSimpleUserGesturePopup(
           let openerHost = BrowserInsecureHTTPSettings.normalizeHost(openerURL.host ?? "") else {
         return false
     }
-    if requestHost == openerHost {
-        return true
-    }
     for aliases in browserNavigationSimpleUserGesturePopupRetargetHostAliases {
-        if aliases.contains(requestHost), aliases.contains(openerHost) {
+        if requestHost != openerHost,
+           aliases.contains(requestHost),
+           aliases.contains(openerHost) {
             return true
         }
     }

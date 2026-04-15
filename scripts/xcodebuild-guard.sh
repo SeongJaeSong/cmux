@@ -176,7 +176,9 @@ list_running_cmux_xcodebuilds() {
   local pid etime command
   while read -r pid etime command; do
     [[ -n "$pid" && -n "$etime" && -n "$command" ]] || continue
-    if [[ "$command" =~ (^|/)xcodebuild[[:space:]]+-project[[:space:]]+([^[:space:]]*/)?GhosttyTabs\.xcodeproj[[:space:]]+-scheme[[:space:]]+cmux([[:space:]]|$) ]]; then
+    if [[ "$command" =~ (^|/)xcodebuild([[:space:]]|$) ]] &&
+       [[ "$command" =~ (^|[[:space:]])-scheme[[:space:]]+cmux([[:space:]]|$) ]] &&
+       [[ "$command" =~ (^|[[:space:]])-project[[:space:]]+.*GhosttyTabs\.xcodeproj([[:space:]]|$) ]]; then
       if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" && "$pid" == "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
         continue
       fi
