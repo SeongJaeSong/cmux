@@ -177,8 +177,11 @@ list_running_cmux_xcodebuilds() {
   while read -r pid etime command; do
     [[ -n "$pid" && -n "$etime" && -n "$command" ]] || continue
     if [[ "$command" =~ (^|/)xcodebuild([[:space:]]|$) ]] &&
-       [[ "$command" =~ (^|[[:space:]])-scheme[[:space:]]+cmux([[:space:]]|$) ]] &&
-       [[ "$command" =~ (^|[[:space:]])-project[[:space:]]+.*GhosttyTabs\.xcodeproj([[:space:]]|$) ]]; then
+       [[ "$command" =~ (^|[[:space:]])-scheme[[:space:]]+cmux([[:space:]]|$) ]]; then
+      if [[ "$command" =~ (^|[[:space:]])-project[[:space:]]+ ]] &&
+         [[ ! "$command" =~ (^|[[:space:]])-project[[:space:]]+.*GhosttyTabs\.xcodeproj([[:space:]]|$) ]]; then
+        continue
+      fi
       if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" && "$pid" == "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
         continue
       fi
@@ -210,10 +213,11 @@ note_xcodebuild_child_pid() {
 
 release_xcodebuild_lock() {
   local owner_pid
-  [[ "$XCODEBUILD_LOCK_ACQUIRED" -eq 1 ]] || return 0
-  owner_pid="$(read_xcodebuild_guard_metadata owner_pid | tr -d '[:space:]')"
-  if [[ "$owner_pid" == "$$" ]]; then
-    rm -rf "$XCODEBUILD_LOCK_DIR"
+  if [[ "$XCODEBUILD_LOCK_ACQUIRED" -eq 1 ]]; then
+    owner_pid="$(read_xcodebuild_guard_metadata owner_pid | tr -d '[:space:]')"
+    if [[ "$owner_pid" == "$$" ]]; then
+      rm -rf "$XCODEBUILD_LOCK_DIR"
+    fi
   fi
   XCODEBUILD_LOCK_ACQUIRED=0
   XCODEBUILD_GUARD_CHILD_PID=""
