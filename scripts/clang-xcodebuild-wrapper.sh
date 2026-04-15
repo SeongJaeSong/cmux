@@ -12,7 +12,25 @@ DEVELOPER_DIR_PATH="${DEVELOPER_DIR_PATH%/}"
 if [[ "$DEVELOPER_DIR_PATH" == *.app ]]; then
   DEVELOPER_DIR_PATH="${DEVELOPER_DIR_PATH}/Contents/Developer"
 fi
-REAL_CLANG="${DEVELOPER_DIR_PATH}/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+
+resolve_real_clang() {
+  local resolved_clang=""
+  local -a xcrun_env
+  xcrun_env=(DEVELOPER_DIR="$DEVELOPER_DIR_PATH")
+  if [[ -n "${TOOLCHAINS:-}" ]]; then
+    xcrun_env+=(TOOLCHAINS="$TOOLCHAINS")
+  fi
+
+  resolved_clang="$(env "${xcrun_env[@]}" xcrun --find clang 2>/dev/null || true)"
+  if [[ -n "$resolved_clang" ]]; then
+    printf '%s\n' "$resolved_clang"
+    return 0
+  fi
+
+  printf '%s\n' "${DEVELOPER_DIR_PATH}/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+}
+
+REAL_CLANG="$(resolve_real_clang)"
 
 if [[ ! -x "$REAL_CLANG" ]]; then
   echo "error: real clang not found at $REAL_CLANG" >&2

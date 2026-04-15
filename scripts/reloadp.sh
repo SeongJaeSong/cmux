@@ -10,7 +10,14 @@ cleanup_reloadp_xcodebuild_state() {
   release_xcodebuild_lock
 }
 
-trap cleanup_reloadp_xcodebuild_state EXIT INT TERM
+handle_reloadp_xcodebuild_signal() {
+  trap - EXIT INT TERM
+  cleanup_reloadp_xcodebuild_state
+  exit 130
+}
+
+trap cleanup_reloadp_xcodebuild_state EXIT
+trap handle_reloadp_xcodebuild_signal INT TERM
 
 acquire_xcodebuild_lock "reloadp.sh cwd=$PWD"
 wait_for_existing_cmux_xcodebuilds

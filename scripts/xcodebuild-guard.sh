@@ -7,6 +7,7 @@
 XCODEBUILD_LOCK_DIR_DEFAULT="${TMPDIR:-/tmp}/cmux-xcodebuild.lock"
 XCODEBUILD_LOCK_DIR="${XCODEBUILD_LOCK_DIR:-$XCODEBUILD_LOCK_DIR_DEFAULT}"
 XCODEBUILD_LOCK_WAIT_SECONDS="${XCODEBUILD_LOCK_WAIT_SECONDS:-2}"
+XCODEBUILD_LOCK_STALE_GRACE_SECONDS="${XCODEBUILD_LOCK_STALE_GRACE_SECONDS:-5}"
 XCODEBUILD_LOCK_ACQUIRED=0
 XCODEBUILD_GUARD_CONTEXT=""
 XCODEBUILD_GUARD_CHILD_PID=""
@@ -92,6 +93,9 @@ build_xcodebuild_env_cmd() {
   if [[ -n "${DEVELOPER_DIR:-}" ]]; then
     XCODEBUILD_ENV_CMD+=(DEVELOPER_DIR="$DEVELOPER_DIR")
   fi
+  if [[ -n "${TOOLCHAINS:-}" ]]; then
+    XCODEBUILD_ENV_CMD+=(TOOLCHAINS="$TOOLCHAINS")
+  fi
   if [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
     XCODEBUILD_ENV_CMD+=(SSH_AUTH_SOCK="$SSH_AUTH_SOCK")
   fi
@@ -117,15 +121,83 @@ read_xcodebuild_guard_metadata() {
   fi
 }
 
-prune_stale_xcodebuild_lock() {
-  local owner_pid child_pid
-  owner_pid="$(read_xcodebuild_guard_metadata owner_pid | tr -d '[:space:]')"
-  child_pid="$(read_xcodebuild_guard_metadata child_pid | tr -d '[:space:]')"
-
-  if [[ -n "$owner_pid" ]] && kill -0 "$owner_pid" 2>/dev/null; then
+cmux_xcodebuild_command_matches() {
+  local command="$1"
+  [[ "$command" =~ (^|/)xcodebuild([[:space:]]|$) ]] || return 1
+  [[ "$command" =~ (^|[[:space:]])-scheme[[:space:]]+cmux([[:space:]]|$) ]] || return 1
+  if [[ "$command" =~ (^|[[:space:]])-project[[:space:]]+ ]] &&
+     [[ ! "$command" =~ (^|[[:space:]])-project[[:space:]]+.*GhosttyTabs\.xcodeproj([[:space:]]|$) ]]; then
     return 1
   fi
-  if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
+  return 0
+}
+
+xcodebuild_guard_command_for_pid() {
+  local pid="$1"
+  ps -p "$pid" -o command= 2>/dev/null | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+xcodebuild_guard_lock_mtime_epoch() {
+  local path="$1"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    stat -f '%m' "$path" 2>/dev/null
+    return
+  fi
+  stat -c '%Y' "$path" 2>/dev/null
+}
+
+xcodebuild_guard_lock_is_within_grace_period() {
+  local lock_mtime now
+  lock_mtime="$(xcodebuild_guard_lock_mtime_epoch "$XCODEBUILD_LOCK_DIR")" || return 1
+  now="$(date +%s)"
+  (( now - lock_mtime <= XCODEBUILD_LOCK_STALE_GRACE_SECONDS ))
+}
+
+xcodebuild_guard_owner_process_matches() {
+  local pid="$1"
+  local recorded_command="$2"
+  local context="$3"
+  local current_command context_script
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  current_command="$(xcodebuild_guard_command_for_pid "$pid")"
+  [[ -n "$current_command" ]] || return 1
+  if [[ -n "$recorded_command" ]]; then
+    [[ "$current_command" == "$recorded_command" ]]
+    return
+  fi
+  context_script="${context%% *}"
+  [[ -n "$context_script" && "$current_command" == *"$context_script"* ]]
+}
+
+xcodebuild_guard_child_process_matches() {
+  local pid="$1"
+  local current_command
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  current_command="$(xcodebuild_guard_command_for_pid "$pid")"
+  [[ -n "$current_command" ]] || return 1
+  cmux_xcodebuild_command_matches "$current_command"
+}
+
+prune_stale_xcodebuild_lock() {
+  local owner_pid child_pid owner_command owner_context
+  owner_pid="$(read_xcodebuild_guard_metadata owner_pid | tr -d '[:space:]')"
+  child_pid="$(read_xcodebuild_guard_metadata child_pid | tr -d '[:space:]')"
+  owner_command="$(read_xcodebuild_guard_metadata owner_command | sed -E 's/[[:space:]]+$//')"
+  owner_context="$(read_xcodebuild_guard_metadata context | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+
+  if [[ -z "$owner_pid" && -z "$child_pid" ]] && xcodebuild_guard_lock_is_within_grace_period; then
+    return 1
+  fi
+  if [[ -n "$owner_pid" && -z "$owner_command" && -z "$owner_context" ]] &&
+     xcodebuild_guard_lock_is_within_grace_period; then
+    return 1
+  fi
+  if xcodebuild_guard_owner_process_matches "$owner_pid" "$owner_command" "$owner_context"; then
+    return 1
+  fi
+  if xcodebuild_guard_child_process_matches "$child_pid"; then
     return 1
   fi
 
@@ -166,6 +238,7 @@ acquire_xcodebuild_lock() {
 
   XCODEBUILD_LOCK_ACQUIRED=1
   write_xcodebuild_guard_metadata owner_pid "$$"
+  write_xcodebuild_guard_metadata owner_command "$(xcodebuild_guard_command_for_pid "$$")"
   write_xcodebuild_guard_metadata context "$context"
   write_xcodebuild_guard_metadata started_at "$(date '+%Y-%m-%d %H:%M:%S %z')"
   build_xcodebuild_env_cmd
@@ -176,12 +249,7 @@ list_running_cmux_xcodebuilds() {
   local pid etime command
   while read -r pid etime command; do
     [[ -n "$pid" && -n "$etime" && -n "$command" ]] || continue
-    if [[ "$command" =~ (^|/)xcodebuild([[:space:]]|$) ]] &&
-       [[ "$command" =~ (^|[[:space:]])-scheme[[:space:]]+cmux([[:space:]]|$) ]]; then
-      if [[ "$command" =~ (^|[[:space:]])-project[[:space:]]+ ]] &&
-         [[ ! "$command" =~ (^|[[:space:]])-project[[:space:]]+.*GhosttyTabs\.xcodeproj([[:space:]]|$) ]]; then
-        continue
-      fi
+    if cmux_xcodebuild_command_matches "$command"; then
       if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" && "$pid" == "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
         continue
       fi

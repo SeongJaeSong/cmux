@@ -37,7 +37,14 @@ cleanup_reload_xcodebuild_state() {
   release_xcodebuild_lock
 }
 
-trap cleanup_reload_xcodebuild_state EXIT INT TERM
+handle_reload_xcodebuild_signal() {
+  trap - EXIT INT TERM
+  cleanup_reload_xcodebuild_state
+  exit 130
+}
+
+trap cleanup_reload_xcodebuild_state EXIT
+trap handle_reload_xcodebuild_signal INT TERM
 
 should_skip_ghostty_cli_helper_zig_build() {
   if [[ "${CMUX_SKIP_ZIG_BUILD:-}" == "1" ]]; then

@@ -21,7 +21,14 @@ cleanup_reloads_xcodebuild_state() {
   release_xcodebuild_lock
 }
 
-trap cleanup_reloads_xcodebuild_state EXIT INT TERM
+handle_reloads_xcodebuild_signal() {
+  trap - EXIT INT TERM
+  cleanup_reloads_xcodebuild_state
+  exit 130
+}
+
+trap cleanup_reloads_xcodebuild_state EXIT
+trap handle_reloads_xcodebuild_signal INT TERM
 
 write_last_socket_path() {
   local socket_path="$1"
