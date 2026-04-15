@@ -12,6 +12,7 @@ ps() {
     125       00:04 xcodebuild -scheme cmux -project /Users/austinwang/My Checkout/cmux1/GhosttyTabs.xcodeproj -configuration Debug build
     126       00:03 xcodebuild -project GhosttyTabs.xcodeproj -scheme cmux-unit -configuration Debug test
     127       00:02 /usr/bin/xcodebuild -project Other.xcodeproj -scheme cmux -configuration Debug build
+    128       00:01 xcodebuild -scheme cmux -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 EOF
 }
 
@@ -29,6 +30,11 @@ fi
 
 if ! grep -Fq "125 00:04 xcodebuild -scheme cmux -project /Users/austinwang/My Checkout/cmux1/GhosttyTabs.xcodeproj -configuration Debug build" <<<"$output"; then
   echo "FAIL: expected reordered cmux build with spaces in project path to be detected"
+  exit 1
+fi
+
+if ! grep -Fq "128 00:01 xcodebuild -scheme cmux -configuration Release -derivedDataPath build CODE_SIGNING_ALLOWED=NO build" <<<"$output"; then
+  echo "FAIL: expected cmux build without -project to be detected"
   exit 1
 fi
 
@@ -60,4 +66,18 @@ if ! grep -Fq "125 00:04" <<<"$output"; then
   exit 1
 fi
 
-echo "PASS: xcodebuild guard matches plain, /usr/bin, and reordered project-path cmux builds"
+if ! grep -Fq "128 00:01" <<<"$output"; then
+  echo "FAIL: guard should continue reporting matching builds without -project"
+  exit 1
+fi
+
+XCODEBUILD_GUARD_CHILD_PID="456"
+XCODEBUILD_LOCK_ACQUIRED=0
+release_xcodebuild_lock
+
+if [[ -n "$XCODEBUILD_GUARD_CHILD_PID" ]]; then
+  echo "FAIL: releasing without an acquired lock must still clear the tracked child pid"
+  exit 1
+fi
+
+echo "PASS: xcodebuild guard matches all supported cmux build layouts and clears stale child tracking"
